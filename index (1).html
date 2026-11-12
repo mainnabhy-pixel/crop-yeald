@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AgriPrice</title>
+<style>
+  :root{--bg:#f6f8f3;--card:#fff;--ink:#1d2a1f;--mute:#5b6b5e;--line:#dfe6da;--green:#2f7d3a;--green-d:#235e2c;--up:#1f7a3a;--down:#b3261e}
+  @media (prefers-color-scheme:dark){:root{--bg:#121a14;--card:#1a241c;--ink:#e8efe6;--mute:#9db0a0;--line:#2b392d;--green:#5fb86b;--green-d:#7fcf8a;--up:#6fd088;--down:#ff8a80}}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+  header{background:var(--green-d);color:#fff;padding:28px 16px}
+  header .in,main,footer{max-width:960px;margin:0 auto;padding:0 16px}
+  header .in{padding:0}
+  h1{margin:0;font-size:28px;letter-spacing:.2px}
+  header p{margin:4px 0 0;opacity:.9}
+  main{padding-top:24px;padding-bottom:32px;display:grid;gap:20px}
+  section{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px}
+  h2{margin:0 0 4px;font-size:20px}
+  .sub{margin:0 0 14px;color:var(--mute);font-size:14px}
+  input,select,textarea,button{font:inherit;color:inherit}
+  input[type=text],textarea{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg)}
+  table{width:100%;border-collapse:collapse;margin-top:12px}
+  th,td{text-align:left;padding:10px 8px;border-bottom:1px solid var(--line)}
+  th{font-size:13px;color:var(--mute);font-weight:600}
+  td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+  .up{color:var(--up)}.down{color:var(--down)}
+  label{display:block;font-weight:600;margin:14px 0 6px;font-size:14px}
+  .btn{background:var(--green);color:#fff;border:0;padding:11px 20px;border-radius:10px;font-weight:600;cursor:pointer;margin-top:16px}
+  .btn:disabled{opacity:.6;cursor:wait}
+  .btn:focus-visible,input:focus-visible,textarea:focus-visible{outline:3px solid var(--green);outline-offset:2px}
+  #preview{max-width:240px;max-height:200px;border-radius:10px;margin-top:10px;display:none;border:1px solid var(--line)}
+  #out{white-space:pre-wrap;margin-top:16px;padding:14px;border-radius:10px;background:var(--bg);border:1px solid var(--line);display:none}
+  #out.err{color:var(--down)}
+  .note{font-size:13px;color:var(--mute);margin-top:10px}
+  footer{padding-bottom:28px;color:var(--mute);font-size:13px}
+</style>
+</head>
+<body>
+<header><div class="in">
+  <h1>🌾 AgriPrice</h1>
+  <p>Mandi price board and AI crop-health check for farmers</p>
+</div></header>
+
+<main>
+  <section aria-labelledby="p-h">
+    <h2 id="p-h">Crop prices</h2>
+    <p class="sub">Rs per quintal. Sample figures for demonstration, not live mandi rates.</p>
+    <label for="q" style="margin-top:0">Search a crop</label>
+    <input id="q" type="text" placeholder="e.g. Wheat" autocomplete="off">
+    <table>
+      <thead><tr><th>Crop</th><th class="num">Price</th><th class="num">Previous</th><th class="num">Change</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </section>
+
+  <section aria-labelledby="d-h">
+    <h2 id="d-h">Crop disease check (AI)</h2>
+    <p class="sub">Upload a clear photo of the affected leaf or plant.</p>
+    <form id="f">
+      <label for="crop">Crop</label>
+      <input id="crop" type="text" placeholder="e.g. Tomato">
+      <label for="sym">Symptoms (optional)</label>
+      <textarea id="sym" rows="3" placeholder="e.g. yellow spots on leaves, wilting since last week"></textarea>
+      <label for="img">Photo</label>
+      <input id="img" type="file" accept="image/jpeg,image/png,image/webp,image/gif" required>
+      <img id="preview" alt="Selected photo preview">
+      <button class="btn" id="go" type="submit">Diagnose</button>
+    </form>
+    <div id="out" role="status" aria-live="polite"></div>
+    <p class="note">AI advice can be wrong. Confirm with a local agriculture officer before treating crops.</p>
+  </section>
+</main>
+
+<footer>Team No. 5 · Chandigarh University · Crop Yield Prediction project</footer>
+
+<script>
+  // ---- Prices (sample data; the page also tries /api/prices if you add one) ----
+  var prices=[
+    {name:"Wheat",price:2450,prev:2425},{name:"Rice (paddy)",price:2300,prev:2310},
+    {name:"Maize",price:2090,prev:2075},{name:"Potato",price:1450,prev:1500},
+    {name:"Soybean",price:4600,prev:4580},{name:"Sorghum",price:3180,prev:3180},
+    {name:"Sweet potato",price:1800,prev:1760},{name:"Cassava",price:1200,prev:1215}
+  ];
+  var rows=document.getElementById("rows"),q=document.getElementById("q");
+  function fmt(n){return n.toLocaleString("en-IN")}
+  function render(){
+    var t=q.value.trim().toLowerCase();rows.innerHTML="";
+    prices.filter(function(p){return p.name.toLowerCase().indexOf(t)>-1}).forEach(function(p){
+      var d=p.price-p.prev,pct=p.prev?(d/p.prev*100):0,cls=d>0?"up":d<0?"down":"";
+      var tr=document.createElement("tr");
+      [[p.name,""],[fmt(p.price),"num"],[fmt(p.prev),"num"],[(d>0?"▲ +":d<0?"▼ ":"– ")+(d?fmt(d)+" ("+pct.toFixed(1)+"%)":"0"),"num "+cls]]
+        .forEach(function(c){var td=document.createElement("td");td.textContent=c[0];td.className=c[1];tr.appendChild(td)});
+      rows.appendChild(tr);
+    });
+    if(!rows.children.length){var tr=document.createElement("tr"),td=document.createElement("td");td.colSpan=4;td.textContent="No crop found.";tr.appendChild(td);rows.appendChild(tr)}
+  }
+  q.addEventListener("input",render);render();
+  fetch("/api/prices").then(function(r){return r.ok?r.json():[]}).then(function(d){
+    if(Array.isArray(d)&&d.length){prices=d;render()}}).catch(function(){});
+
+  // ---- Disease check ----
+  var img=document.getElementById("img"),pv=document.getElementById("preview"),out=document.getElementById("out"),go=document.getElementById("go");
+  img.addEventListener("change",function(){
+    var f=img.files[0];if(!f){pv.style.display="none";return}
+    pv.src=URL.createObjectURL(f);pv.style.display="block";
+  });
+  function show(msg,err){out.textContent=msg;out.className=err?"err":"";out.style.display="block"}
+  // shrink the photo so the upload stays small
+  function shrink(file){
+    return new Promise(function(ok,fail){
+      var im=new Image();im.onload=function(){
+        var m=1280,s=Math.min(1,m/Math.max(im.width,im.height)),c=document.createElement("canvas");
+        c.width=Math.round(im.width*s);c.height=Math.round(im.height*s);
+        c.getContext("2d").drawImage(im,0,0,c.width,c.height);
+        ok(c.toDataURL("image/jpeg",0.85).split(",")[1]);
+      };im.onerror=function(){fail(new Error("Could not read that image."))};
+      im.src=URL.createObjectURL(file);
+    });
+  }
+  document.getElementById("f").addEventListener("submit",function(e){
+    e.preventDefault();var f=img.files[0];if(!f)return;
+    go.disabled=true;go.textContent="Analysing…";show("Analysing your photo, please wait…",false);
+    shrink(f).then(function(b64){
+      return fetch("/api/diagnose",{method:"POST",headers:{"content-type":"application/json"},
+        body:JSON.stringify({image:b64,media_type:"image/jpeg",crop:document.getElementById("crop").value,symptoms:document.getElementById("sym").value})});
+    }).then(function(r){return r.json().catch(function(){return{error:"Server returned an unexpected response."}})})
+    .then(function(d){d.error?show(d.error,true):show(d.result,false)})
+    .catch(function(x){show(x.message||"Something went wrong.",true)})
+    .finally(function(){go.disabled=false;go.textContent="Diagnose"});
+  });
+</script>
+</body>
+</html>
